@@ -30,6 +30,17 @@ pop-up entries — automatically, and only if they're really there.
 
 You need tmux (version 3.3a or newer — check with `tmux -V`).
 
+**First, turn on tmux mouse mode.** It's off by default in released tmux, and
+right-click can't pop the menu until it's on. Add this line to your
+`~/.tmux.conf`:
+
+```tmux
+set -g mouse on
+```
+
+(The keyboard hotkey — default `Alt+q` — works without this, but the headline
+right-click menu needs it.)
+
 ### If you use TPM (the Tmux Plugin Manager)
 
 Most people who install tmux plugins use TPM. If you don't have it yet, this
