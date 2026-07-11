@@ -12,7 +12,8 @@
 搬到**滑鼠右鍵**：點一下、選一項、完成。選單會在你點擊的位置彈出，用起來就像
 一般桌面軟體的右鍵選單一樣自然。
 
-它只使用 tmux 內建的指令，不會對系統做奇怪的事。如果你剛好裝了
+核心選單只使用 tmux 內建的指令；選配項目（lazygit/yazi 彈窗、`@context-menu-extra`
+自訂項）則會執行外部程式。如果你剛好裝了
 [lazygit](https://github.com/jesseduffield/lazygit) 或
 [yazi](https://github.com/sxyazi/yazi)，選單會**自動**多出對應的彈出視窗項目
 （偵測得到才會出現）。
