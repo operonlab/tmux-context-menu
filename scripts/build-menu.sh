@@ -15,9 +15,17 @@ CURRENT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 PLUGIN="context-menu"
 CACHE_DIR="${TMUX_TMPDIR:-/tmp}/${PLUGIN}-$(id -u)"
-# Parent ($TMUX_TMPDIR or /tmp) always exists, so no -p; enforce 0700 either way.
+# Parent ($TMUX_TMPDIR or /tmp) always exists, so no -p.
 mkdir -m 700 "$CACHE_DIR" 2>/dev/null
-chmod 700 "$CACHE_DIR" 2>/dev/null
+# Verify before chmod/use: a symlink pre-created at this predictable path
+# would make `chmod`/writes follow it to an attacker-controlled target. If
+# it's not a real directory, skip anything that needs the cache silently.
+if [ -d "$CACHE_DIR" ] && [ ! -L "$CACHE_DIR" ]; then
+	chmod 700 "$CACHE_DIR" 2>/dev/null
+	cache_ok=1
+else
+	cache_ok=0
+fi
 
 MENU_TITLE='#[align=centre]#{window_index}:#{window_name}'
 
@@ -117,7 +125,7 @@ fi
 # Double-click selects a word, triple-click selects a line, and a drag-select
 # copies — all without scrolling the pane back to the bottom. This changes
 # tmux's default click behavior, so it is off unless you turn it on.
-if [ "$opt_copy" = "on" ]; then
+if [ "$opt_copy" = "on" ] && [ "$cache_ok" = "1" ]; then
 	if [ -n "$opt_copy_cmd" ]; then
 		copy_action="send-keys -X copy-pipe-no-clear \"$opt_copy_cmd\""
 	else

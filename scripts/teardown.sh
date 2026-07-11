@@ -29,18 +29,17 @@ opt_key="$(get_tmux_option @context-menu-key M-q)"
 tmux unbind -n M-q 2>/dev/null
 
 # 2. Copy module ---------------------------------------------------------------
-# Only touch these if the copy module was actually enabled, so we don't strip
-# tmux's own default drag-to-copy from users who never turned it on.
-opt_copy="$(get_tmux_option @context-menu-mouse-copy off)"
-if [ "$opt_copy" = "on" ]; then
-	for tbl in copy-mode copy-mode-vi; do
-		tmux unbind -T "$tbl" MouseDragEnd1Pane 2>/dev/null
-		tmux unbind -T "$tbl" DoubleClick1Pane 2>/dev/null
-		tmux unbind -T "$tbl" TripleClick1Pane 2>/dev/null
-	done
-	tmux unbind -T root DoubleClick1Pane 2>/dev/null
-	tmux unbind -T root TripleClick1Pane 2>/dev/null
-fi
+# Unconditional: the currently-read @context-menu-mouse-copy option may no
+# longer match what was actually bound (e.g. it was "on" at load time and
+# changed since), so always try to unbind these. Unbinding a binding that was
+# never installed is a harmless no-op.
+for tbl in copy-mode copy-mode-vi; do
+	tmux unbind -T "$tbl" MouseDragEnd1Pane 2>/dev/null
+	tmux unbind -T "$tbl" DoubleClick1Pane 2>/dev/null
+	tmux unbind -T "$tbl" TripleClick1Pane 2>/dev/null
+done
+tmux unbind -T root DoubleClick1Pane 2>/dev/null
+tmux unbind -T root TripleClick1Pane 2>/dev/null
 
 # 3. Runtime options -----------------------------------------------------------
 for opt in \

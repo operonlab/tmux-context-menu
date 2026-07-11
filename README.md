@@ -1,14 +1,11 @@
 # tmux-context-menu
 
+> 中文說明請見 [docs/zh.md](docs/zh.md)
+
 **Right-click anywhere in a tmux pane and get a little menu — split, zoom, kill,
 rename, jump between sessions — right where your mouse is.** No prefix keys to
 memorize. Prefer the keyboard? The same menu opens with a hotkey (default
 `Alt+q`).
-
-![demo](docs/demo.gif)
-
-> The GIF above is a placeholder — an animated demo recorded with
-> [vhs](https://github.com/charmbracelet/vhs) is still to be added.
 
 ---
 
@@ -19,9 +16,11 @@ most common actions on your **mouse right-click** instead: click, pick, done.
 The menu pops up exactly where you clicked, so it feels like a normal desktop
 app's right-click menu.
 
-It only uses tmux's own built-in commands, so nothing weird happens to your
-system. If you happen to have [lazygit](https://github.com/jesseduffield/lazygit)
-or [yazi](https://github.com/sxyazi/yazi) installed, they show up as bonus
+The core menu uses only tmux's own built-in commands. Optional entries — the
+lazygit/yazi popups below, and anything you add via `@context-menu-extra` —
+run external commands instead. If you happen to have
+[lazygit](https://github.com/jesseduffield/lazygit) or
+[yazi](https://github.com/sxyazi/yazi) installed, they show up as bonus
 pop-up entries — automatically, and only if they're really there.
 
 ---
@@ -79,7 +78,7 @@ Reload your config (`tmux source-file ~/.tmux.conf`) and right-click a pane.
 
 ## 3. Demo
 
-`docs/demo.gif` — placeholder. A recorded walkthrough (vhs) will be added here.
+*Demo GIF coming soon.*
 
 ---
 
