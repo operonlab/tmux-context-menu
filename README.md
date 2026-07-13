@@ -7,6 +7,10 @@ rename, jump between sessions — right where your mouse is.** No prefix keys to
 memorize. Prefer the keyboard? The same menu opens with a hotkey (default
 `Alt+q`).
 
+![tmux-context-menu's menu popped open on a pane — Horizontal/Vertical Split, Zoom, Kill Pane/Window, Rename, Choose Session, plus the optional Lazygit and Yazi popup entries](docs/screenshot.png)
+
+*One keystroke (or a right-click) away: the whole menu, popped open right where you are — no prefix to memorize.*
+
 ---
 
 ## 1. What is this?

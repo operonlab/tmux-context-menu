@@ -4,6 +4,10 @@
 關閉、改名、切換 session，全部一鍵完成。不用背任何快捷鍵組合。習慣用鍵盤的人，
 同一份選單也可以用熱鍵打開（預設 `Alt+q`）。
 
+![tmux-context-menu 在畫面上彈出的右鍵選單：水平／垂直分割、放大、關閉 pane／window、改名、切換 session，以及偵測到才出現的 Lazygit、Yazi 彈窗項目](docs/screenshot.png)
+
+*一個按鍵（或右鍵）就叫得出來：整份選單就在你操作的位置彈出，不用背 prefix。*
+
 ---
 
 ## 這是什麼？
