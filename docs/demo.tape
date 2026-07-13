@@ -1,37 +1,37 @@
 # tmux-context-menu demo — a right-click (or Alt+q) context menu at your cursor:
-# split, zoom, kill, rename, jump sessions, with no prefix keys to memorize.
-#
-# Recorded against an isolated tmux server (socket: vhsdemo-context-menu,
-# -f /dev/null), never the user's live server. vhs can synthesize neither a real
-# mouse right-click nor a Meta keypress, so the setup binds the SAME menu to a
-# key vhs can send (Ctrl+g) and this tape triggers that; the menu contents are
-# identical to the default Alt+q / right-click entry points shown in the banner.
-Output docs/demo.gif
+# split, zoom, kill, rename, jump sessions, plus Lazygit / Yazi popups when
+# installed — no prefix keys to memorize.
+# Fully self-contained: docs/demo-setup.sh stages a sample project and a
+# cockpit-style themed ISOLATED tmux server (socket cm-demo). vhs can synthesize
+# neither a real right-click nor a Meta keypress, so the setup binds the SAME
+# menu to Ctrl+g (@context-menu-key) — identical contents. Re-record from the
+# repo root with:  vhs docs/demo.tape
+Output "docs/demo.gif"
 Require tmux
 
 Set Shell "bash"
-Set Width 1200
-Set Height 660
-Set FontSize 15
-Set Padding 12
-Set TypingSpeed 55ms
+Set FontFamily "MesloLGS Nerd Font Mono"
+Set FontSize 20
+Set Width 1600
+Set Height 900
+Set Padding 20
+Set TypingSpeed 35ms
 
-# ---- hidden setup ----
 Hide
-Type "bash /private/tmp/claude-501/-Users-joneshong/aaff1254-ec36-4c2f-98bf-76d62cc8b483/scratchpad/vhs-visual/setup-context-menu.sh"
+Type "bash docs/demo-setup.sh"
 Enter
-Sleep 1s
-Type "clear; tmux -L vhsdemo-context-menu attach -t demo"
+Sleep 3s
+Type "clear; tmux -L cm-demo attach -t demo"
 Enter
 Sleep 1500ms
 Show
 
-# ---- visible demo ----
+# the cockpit: a working pane, waiting for the menu
 Sleep 1500ms
 
-# open the menu with the keyboard hotkey
+# open the menu at the cursor (stand-in for right-click / Alt+q)
 Ctrl+G
-Sleep 2500ms
+Sleep 2000ms
 
 # walk down a few entries to show the menu is live
 Down
@@ -39,18 +39,25 @@ Sleep 500ms
 Down
 Sleep 500ms
 Down
-Sleep 500ms
-Down
-Sleep 1500ms
+Sleep 1200ms
+
+# pick "Vertical Split" — the menu actually runs the command
+Type "v"
+Sleep 2500ms
+
+# open the menu again, this time on the freshly split pane
+Ctrl+G
+Sleep 2500ms
 
 # close it without running anything
 Escape
-Sleep 1500ms
+Sleep 1200ms
 
-# ---- hidden teardown ----
 Hide
 Escape
-Ctrl+C
-Type "tmux -L vhsdemo-context-menu kill-server"
+Ctrl+B
+Type "d"
+Sleep 500ms
+Type "tmux -L cm-demo kill-server"
 Enter
 Sleep 500ms
