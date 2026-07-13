@@ -45,7 +45,7 @@ git clone https://github.com/tmux-plugins/tpm ~/.tmux/plugins/tpm
 這行必須放在最後）：
 
 ```tmux
-set -g @plugin 'JonesHong/tmux-context-menu'
+set -g @plugin 'operonlab/tmux-context-menu'
 run '~/.tmux/plugins/tpm/tpm'
 ```
 
@@ -57,7 +57,7 @@ run '~/.tmux/plugins/tpm/tpm'
 把這個 repo clone 到任何地方，然後在 `~/.tmux.conf` 加**一行**：
 
 ```sh
-git clone https://github.com/JonesHong/tmux-context-menu ~/.tmux/plugins/tmux-context-menu
+git clone https://github.com/operonlab/tmux-context-menu ~/.tmux/plugins/tmux-context-menu
 ```
 
 ```tmux

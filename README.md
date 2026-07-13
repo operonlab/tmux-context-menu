@@ -53,7 +53,7 @@ Then add these two lines to your `~/.tmux.conf` (near the bottom, but the
 `run '~/.tmux/plugins/tpm/tpm'` line must stay last):
 
 ```tmux
-set -g @plugin 'JonesHong/tmux-context-menu'
+set -g @plugin 'operonlab/tmux-context-menu'
 run '~/.tmux/plugins/tpm/tpm'
 ```
 
@@ -65,7 +65,7 @@ then `I` (capital i). Done — right-click a pane.
 Clone this repo anywhere, then add **one line** to your `~/.tmux.conf`:
 
 ```sh
-git clone https://github.com/JonesHong/tmux-context-menu ~/.tmux/plugins/tmux-context-menu
+git clone https://github.com/operonlab/tmux-context-menu ~/.tmux/plugins/tmux-context-menu
 ```
 
 ```tmux

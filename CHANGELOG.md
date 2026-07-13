@@ -29,4 +29,4 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - MIT license, English README, Traditional Chinese docs, CI (shellcheck + an
   isolated-socket smoke test).
 
-[0.1.0]: https://github.com/JonesHong/tmux-context-menu/releases/tag/v0.1.0
+[0.1.0]: https://github.com/operonlab/tmux-context-menu/releases/tag/v0.1.0
