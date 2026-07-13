@@ -1,0 +1,28 @@
+name: Bug Report
+description: Report a problem with the plugin
+body:
+  - type: textarea
+    attributes:
+      label: What happened?
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Steps to reproduce
+    validations:
+      required: true
+  - type: input
+    attributes:
+      label: tmux version
+      placeholder: tmux -V
+    validations:
+      required: true
+  - type: input
+    attributes:
+      label: OS
+    validations:
+      required: true
+  - type: input
+    attributes:
+      label: Plugin version
+      placeholder: git tag or commit
