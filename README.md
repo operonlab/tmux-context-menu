@@ -78,7 +78,7 @@ Reload your config (`tmux source-file ~/.tmux.conf`) and right-click a pane.
 
 ## 3. Demo
 
-*Demo GIF coming soon.*
+![tmux-context-menu demo — a context menu at your cursor with split, zoom, kill, rename and session-jump entries](docs/demo.gif)
 
 ---
 
