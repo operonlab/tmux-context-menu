@@ -18,8 +18,10 @@ jobs:
           shellcheck -S warning \
             context-menu.tmux \
             scripts/build-menu.sh \
+            scripts/show-menu.sh \
             scripts/teardown.sh \
-            scripts/helpers.sh
+            scripts/helpers.sh \
+            tests/menu-test.sh
 
   smoke:
     name: tmux smoke (isolated socket)
@@ -35,59 +37,8 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y tmux
       - name: tmux version
         run: tmux -V
-      - name: Load plugin on an isolated socket and assert bindings
-        run: |
-          set -u
-          SOCK="ctxmenu-ci-$$"
-          cleanup() { tmux -L "$SOCK" kill-server 2>/dev/null || true; }
-          trap cleanup EXIT
-          REPO="$PWD"
-
-          tmux -L "$SOCK" -f /dev/null new-session -d -x 200 -y 50
-          tmux -L "$SOCK" set -g @context-menu-mouse on
-          tmux -L "$SOCK" set -g @context-menu-key M-q
-          tmux -L "$SOCK" set -g @context-menu-mouse-copy on
-          tmux -L "$SOCK" run-shell "$REPO/context-menu.tmux"
-          sleep 0.3
-
-          fail=0
-          check() {  # <description> <grep-args...>
-            desc="$1"; shift
-            if tmux -L "$SOCK" list-keys -T root | grep -Eq "$@"; then
-              echo "ok: $desc"
-            else
-              echo "FAIL: $desc"; fail=1
-            fi
-          }
-
-          check "mouse right-click menu bound" "MouseDown3Pane[[:space:]]+display-menu"
-          check "copy module root double-click bound" "DoubleClick1Pane[[:space:]]+select-pane -t ="
-          if tmux -L "$SOCK" list-keys | grep -Eq "M-q[[:space:]]+display-menu"; then
-            echo "ok: keyboard entry (M-q) bound"
-          else
-            echo "FAIL: keyboard entry (M-q) bound"; fail=1
-          fi
-
-          # Extra item injection must rebuild and source without error.
-          tmux -L "$SOCK" set -g @context-menu-extra "Reload|Q|source-file ~/.tmux.conf"
-          if tmux -L "$SOCK" run-shell "$REPO/context-menu.tmux"; then
-            echo "ok: rebuild after @context-menu-extra injection"
-          else
-            echo "FAIL: rebuild after @context-menu-extra injection"; fail=1
-          fi
-          if tmux -L "$SOCK" list-keys -T root | grep -q "Reload"; then
-            echo "ok: extra item present in menu"
-          else
-            echo "FAIL: extra item present in menu"; fail=1
-          fi
-
-          # Teardown must remove our entry points.
-          tmux -L "$SOCK" run-shell "$REPO/scripts/teardown.sh"
-          sleep 0.2
-          if tmux -L "$SOCK" list-keys -T root | grep -Eq "^bind-key +-T root +MouseDown3Pane "; then
-            echo "FAIL: MouseDown3Pane still bound after teardown"; fail=1
-          else
-            echo "ok: MouseDown3Pane removed after teardown"
-          fi
-
-          exit "$fail"
+      - name: Menu builder + bindings (isolated socket)
+        # Drives the real menu-building code on a private tmux -L socket: the
+        # version gate, the live-state conditional items, the entry-point
+        # bindings and teardown. See tests/menu-test.sh for the assertions.
+        run: tests/menu-test.sh

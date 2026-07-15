@@ -114,12 +114,15 @@ tmux -L "$SOCK" set -gu @context-menu-extra
 echo "== load binds entry points to the dynamic builder; teardown removes them =="
 tmux -L "$SOCK" set -g @context-menu-mouse on
 tmux -L "$SOCK" set -g @context-menu-key M-q
+tmux -L "$SOCK" set -g @context-menu-mouse-copy on
 tmux -L "$SOCK" run-shell "$REPO/context-menu.tmux"
 sleep 0.2
 assert_true  "MouseDown3Pane -> run-shell show-menu" \
 	bash -c 'tmux -L "$0" list-keys -T root | grep -F MouseDown3Pane | grep -q "show-menu.sh"' "$SOCK"
 assert_true  "M-q -> run-shell show-menu" \
 	bash -c 'tmux -L "$0" list-keys | grep -F "M-q" | grep -q "show-menu.sh"' "$SOCK"
+assert_true  "copy module root double-click bound" \
+	bash -c 'tmux -L "$0" list-keys -T root | grep -qE "DoubleClick1Pane[[:space:]]+select-pane -t ="' "$SOCK"
 tmux -L "$SOCK" run-shell "$REPO/scripts/teardown.sh"
 sleep 0.2
 assert_false "MouseDown3Pane removed after teardown" \
