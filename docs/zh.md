@@ -85,6 +85,7 @@ run-shell '~/.tmux/plugins/tmux-context-menu/context-menu.tmux'
 | `@context-menu-mouse-copy` | `off` | 加入「雙擊選字、三擊選行、複製且畫面不跳走」。因為會改變點擊行為，所以預設關閉。 |
 | `@context-menu-copy-command` | `''`（空） | 只在 `@context-menu-mouse-copy` 為 `on` 時有用。留空＝複製到 tmux 自己的剪貼簿；填指令（例：macOS 用 `pbcopy`、Linux 用 `xclip -sel clip`）就會同時複製到系統剪貼簿。 |
 | `@context-menu-extra` | `''`（空） | 自訂選單項目，請先看下面的警告。 |
+| `@context-menu-source` | `''`（空） | 指向一個「印出整份選單」的檔案（每列一筆記錄），用它**取代**內建清單（`@context-menu-extra` 仍會接在後面附加）。每次開啟選單時都會讀取並**執行**這個檔案。詳見下方「單一來源選單項目」，包含 ⚠️ 警告：這個選項會**執行該檔案**。 |
 
 ### 自訂選單項目（`@context-menu-extra`）
 
@@ -99,6 +100,64 @@ set -g @context-menu-extra "Htop|H|display-popup -E htop ; 重新載入|Q|source
 
 這會在選單底部多出兩列：一列用彈出視窗開 `htop`（按 `H`），一列重新載入
 tmux 設定（按 `Q`）。
+
+### 單一來源選單項目（`@context-menu-source`）
+
+`@context-menu-extra` 只是**附加**幾列；`@context-menu-source` 更進一步，讓
+**一個檔案定義整份核心選單**，取代內建清單。把選項指到那個檔案：
+
+```tmux
+set -g @context-menu-source '~/.tmux/menu-items.sh'
+```
+
+> ⚠️ **這個選項會執行該檔案。** 每次開啟選單時，都會執行這個檔案並解析它的
+> 輸出；每一項的 `when` 條件（見下）會透過 `sh -c` 執行。信任模型與
+> `@context-menu-extra` 相同 —— 只指向你自己撰寫、掌控的檔案，絕不要用來路
+> 不明的檔案。
+
+**取代 vs 附加。** 當 `@context-menu-source` 有設定且檔案可讀時，它的記錄會成為
+整份核心選單（內建的 分割／放大／關閉／… 清單就不再使用）。`@context-menu-extra`
+仍會在之後執行，所以它的項目會附加在你來源清單的最下方。不設定
+`@context-menu-source` 就什麼都不變，內建選單行為完全一如既往。
+
+**記錄格式。** 檔案每列印出一筆記錄，欄位以 ASCII **單元分隔符** 位元組 `0x1F`
+串接 —— **不是** tab 或空白。這很關鍵：tab 與空白都是空白字元，shell 的 `read`
+會把連續空白摺疊、並丟掉中間的空欄位，於是空的 `when`／`minver` 會讓 `desc`
+滑到錯誤的欄位。`0x1F` 是非空白字元、也不會出現在真實文字裡，所以空欄位能保住
+位置。檔案維持以換行結尾、方便 `grep`。
+
+一筆 **item** 記錄剛好有七個欄位：
+
+```
+type␟label␟key␟command␟when␟minver␟desc        （␟ = 0x1F 位元組）
+```
+
+| 欄位 | 意義 |
+|---|---|
+| `type` | 固定字串 `item`。 |
+| `label` | 選單標籤。可含 tmux `#{...}` 格式條件式 —— 原封不動交給 `display-menu`，由 tmux 在繪製當下即時求值。 |
+| `key` | 助憶鍵（單一字元或按鍵字串）。 |
+| `command` | 點選時執行的 tmux 指令，就照 `display-menu` 需要的樣子（用一般的單引號 shell 引用撰寫）。 |
+| `when` | *（選用）* shell 條件，透過 `sh -c` 執行。非零結束 → 建立選單時略過該項。留空 → 一律納入。 |
+| `minver` | *（選用）* 最低 tmux `主.次` 版本。執行中的 tmux 較舊就略過該項。留空 → 不做版本閘。 |
+| `desc` | *（選用）* 人類看的速查文字；選單本身會忽略它。 |
+
+只有一個欄位、內容為 `sep` 的列會繪成分隔線。空白列、以 `#` 開頭的列、以及
+缺少 label 或 key 的項目都會被略過。
+
+檔案開頭放兩個小工具最好寫：
+
+```sh
+US=$(printf '\037')
+item() { printf '%s%s%s%s%s%s%s%s%s%s%s%s%s\n' item "$US" "$1" "$US" "$2" "$US" "$3" "$US" "${4-}" "$US" "${5-}" "$US" "${6-}"; }
+sep()  { printf 'sep\n'; }
+
+# 用法：item <label> <key> <command> [when] [minver] [desc] ; sep
+item 'Kill Pane' x 'kill-pane' '' '' '關閉窗格'
+item '#{?window_zoomed_flag,Unzoom,Zoom}' z 'resize-pane -Z' '' '' '縮放 / 取消縮放'
+item 'Customize Options' c 'customize-mode -Z' '' '3.2' '需要 tmux 3.2'
+sep
+```
 
 ---
 

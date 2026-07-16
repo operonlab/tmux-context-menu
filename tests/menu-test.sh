@@ -23,8 +23,13 @@ unset TMUX
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SHOW="$REPO/scripts/show-menu.sh"
 SOCK="ctxmenu-test-$$-${RANDOM}"
+# Private scratch dir for the @context-menu-source fixture; removed on exit.
+FIXTURE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/ctxmenu-fixture-XXXXXX")"
 
-cleanup() { tmux -L "$SOCK" kill-server 2>/dev/null || true; }
+cleanup() {
+	tmux -L "$SOCK" kill-server 2>/dev/null || true
+	rm -rf "$FIXTURE_DIR" 2>/dev/null || true
+}
 trap cleanup EXIT
 
 fail=0
@@ -110,6 +115,87 @@ tmux -L "$SOCK" set -g @context-menu-extra "Reload|Q|source-file ~/.tmux.conf"
 menu="$(build)"
 assert_true  "extra item present in built menu"    grep -qx "Reload" <<<"$menu"
 tmux -L "$SOCK" set -gu @context-menu-extra
+
+# ---------------------------------------------------------------------------
+# @context-menu-source — the single-file menu body (0x1F records).
+# ---------------------------------------------------------------------------
+FIXTURE="$FIXTURE_DIR/menu-items.sh"
+
+# write_fixture <when-condition>
+#   Regenerates the fixture. <when-condition> is the shell condition for the
+#   one when-gated item ("" = always include, "false" = drop, "true" = keep).
+#   Emits, via the spec's US-helpers: a plain item, a `sep`, a
+#   conditional-label item (passthrough), a minver-gated item (3.2), an item
+#   whose desc must never leak, and — to prove the separator choice is
+#   load-bearing — one record whose fields are joined by SPACE instead of 0x1F.
+write_fixture() {
+	local when_val="$1"
+	cat > "$FIXTURE" <<'HDR'
+US=$(printf '\037')
+item() { printf '%s%s%s%s%s%s%s%s%s%s%s%s%s\n' item "$US" "$1" "$US" "$2" "$US" "$3" "$US" "${4-}" "$US" "${5-}" "$US" "${6-}"; }
+sep()  { printf 'sep\n'; }
+HDR
+	{
+		echo "item 'Fixture Plain' p 'display-message Plain' '' '' 'plain cheatsheet'"
+		echo "sep"
+		echo "item '#{?window_zoomed_flag,Unzoom,Zoom}' z 'resize-pane -Z' '' '' '縮放 / 取消縮放'"
+		echo "item 'Minver Gated' V 'customize-mode -Z' '' '3.2' 'needs tmux 3.2'"
+		echo "item 'Has Desc' D 'display-message HasDesc' '' '' 'human readable desc'"
+		# Space-joined (not 0x1F): with the real separator this whole line lands
+		# in rtype, matches no case arm, and is dropped. If IFS ever collapsed
+		# on whitespace it would parse into a clean row — which the test forbids.
+		echo "printf '%s\\n' 'item BrokenSpaceRow b broken-cmd'"
+		printf "item 'When Gated' w 'display-message Gated' '%s' '' 'gated by when'\n" "$when_val"
+	} >> "$FIXTURE"
+}
+
+# sep_after_plain <menu-text>  — true when an empty menu line (the rendered
+# `sep`) immediately follows the plain item's three fields.
+sep_after_plain() {
+	awk '
+		p3=="Fixture Plain" && p2=="p" && p1=="display-message Plain" && $0=="" {ok=1}
+		{p3=p2; p2=p1; p1=$0}
+		END{exit(ok?0:1)}
+	' <<<"$1"
+}
+
+echo "== @context-menu-source: replace semantics + record parsing =="
+write_fixture ""
+tmux -L "$SOCK" set -g @context-menu-source "$FIXTURE"
+menu="$(build)"
+assert_false "built-in dropped in source mode"       grep -qx "Horizontal Split" <<<"$menu"
+assert_true  "plain source item present"             grep -qx "Fixture Plain" <<<"$menu"
+assert_true  "separator (empty line) after the plain item" sep_after_plain "$menu"
+assert_true  "conditional label passed through verbatim" \
+	grep -qxF '#{?window_zoomed_flag,Unzoom,Zoom}' <<<"$menu"
+assert_true  "item with a desc still renders"        grep -qx "Has Desc" <<<"$menu"
+assert_false "desc text never leaks into the menu"   grep -qx "human readable desc" <<<"$menu"
+assert_false "space-joined record is not a clean row" grep -qx "BrokenSpaceRow" <<<"$menu"
+
+echo "== @context-menu-source: when-gate condition inversion =="
+write_fixture false
+menu="$(build)"
+assert_false "when=false drops the item"             grep -qx "When Gated" <<<"$menu"
+write_fixture true
+menu="$(build)"
+assert_true  "when=true keeps the item"              grep -qx "When Gated" <<<"$menu"
+
+echo "== @context-menu-source: minver gate flip =="
+tmux -L "$SOCK" set-environment -g CONTEXT_MENU_FORCE_VERSION 3.1
+menu="$(build)"
+assert_false "minver 3.2 item dropped on forced tmux 3.1" grep -qx "Minver Gated" <<<"$menu"
+tmux -L "$SOCK" set-environment -g CONTEXT_MENU_FORCE_VERSION 3.3
+menu="$(build)"
+assert_true  "minver 3.2 item present on forced tmux 3.3"  grep -qx "Minver Gated" <<<"$menu"
+tmux -L "$SOCK" set-environment -gu CONTEXT_MENU_FORCE_VERSION
+
+echo "== @context-menu-source: @context-menu-extra still appends =="
+tmux -L "$SOCK" set -g @context-menu-extra "Reload|Q|source-file ~/.tmux.conf"
+menu="$(build)"
+assert_true  "extra appends in source mode"          grep -qx "Reload" <<<"$menu"
+assert_false "core stays replaced when extra appends" grep -qx "Horizontal Split" <<<"$menu"
+tmux -L "$SOCK" set -gu @context-menu-extra
+tmux -L "$SOCK" set -gu @context-menu-source
 
 echo "== load binds entry points to the dynamic builder; teardown removes them =="
 tmux -L "$SOCK" set -g @context-menu-mouse on
