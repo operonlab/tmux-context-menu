@@ -4,6 +4,26 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-07-16
+
+### Added
+- `@context-menu-source <path>` (default `''`): point it at a file that prints
+  the whole menu as `0x1F`-separated records and it **replaces** the built-in
+  core list. Read — and executed — per menu open by `show-menu.sh` (never by
+  `build-menu.sh`), so edits take effect on the next open without a plugin
+  reload. Each `item` record carries label / key / command plus optional
+  build-time gates: `when` (run via `sh -c`, non-zero exit drops the item) and
+  `minver` (`version_ge`, an older tmux drops the item), with an ignored `desc`
+  cheatsheet field; a lone `sep` renders a divider. Labels pass through verbatim
+  so tmux `#{...}` format conditionals still render live. `@context-menu-extra`
+  still appends after the sourced core. Documented as executing the file — same
+  trust model as `@context-menu-extra`; only point it at a file you trust.
+
+### Notes
+- Off by default: with `@context-menu-source` unset, the built menu is
+  byte-identical to 0.1.0 across the plain / zoomed / marked / version-gated /
+  extra state matrix.
+
 ## [0.1.0] - 2026-07-11
 
 ### Added
@@ -29,4 +49,5 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - MIT license, English README, Traditional Chinese docs, CI (shellcheck + an
   isolated-socket smoke test).
 
+[0.2.0]: https://github.com/operonlab/tmux-context-menu/releases/tag/v0.2.0
 [0.1.0]: https://github.com/operonlab/tmux-context-menu/releases/tag/v0.1.0

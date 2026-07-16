@@ -99,6 +99,7 @@ using `set -g`. All of them are optional — the defaults are sensible.
 | `@context-menu-mouse-copy` | `off` | Adds "double-click to select a word, triple-click to select a line, and copy — without scrolling away". It's off by default because it changes how clicks behave. |
 | `@context-menu-copy-command` | `''` (empty) | Only matters when `@context-menu-mouse-copy` is `on`. Leave empty to copy into tmux's own clipboard. Set it to a command (e.g. `pbcopy` on macOS, `xclip -sel clip` on Linux) to also copy to your system clipboard. |
 | `@context-menu-extra` | `''` (empty) | Add your own menu items. See the warning below. |
+| `@context-menu-source` | `''` (empty) | Point it at a file that prints the **whole** menu, one record per line, and it **replaces** the built-in list with yours (`@context-menu-extra` still appends after it). The file is read — and run — every time the menu opens. See "Single-source menu items" below, including the ⚠️ warning: this **executes the file**. |
 
 ### Adding your own menu items (`@context-menu-extra`)
 
@@ -115,6 +116,68 @@ set -g @context-menu-extra "Htop|H|display-popup -E htop ; Reload tmux|Q|source-
 
 That adds two rows to the bottom of the menu: one opens `htop` in a pop-up
 (press `H`), one reloads your tmux config (press `Q`).
+
+### Single-source menu items (`@context-menu-source`)
+
+`@context-menu-extra` *appends* a few rows. `@context-menu-source` goes further:
+it lets **one file define the entire core menu**, replacing the built-in list.
+Point the option at that file:
+
+```tmux
+set -g @context-menu-source '~/.tmux/menu-items.sh'
+```
+
+> ⚠️ **This option runs the file.** Every time the menu opens, the file is
+> executed and its output parsed; any per-item `when` condition (below) is run
+> through `sh -c`. Same trust model as `@context-menu-extra` — only ever point
+> it at a file you wrote and control. Never use a file from an untrusted source.
+
+**Replace vs. append.** When `@context-menu-source` is set and the file is
+readable, its records become the whole core menu (the built-in Split / Zoom /
+Kill / … list is *not* used). `@context-menu-extra` still runs afterwards, so
+its items append to the bottom of your sourced list. Leave `@context-menu-source`
+unset and nothing changes — the built-in menu behaves exactly as before.
+
+**Record format.** The file prints one record per line. Fields are joined by the
+ASCII **Unit Separator** byte `0x1F` — *not* tab or space. This matters: tab and
+space are whitespace, and the shell's `read` collapses runs of them and drops
+empty interior fields, so an empty `when`/`minver` would let `desc` slide into
+the wrong column. `0x1F` is non-whitespace and never appears in real text, so
+empty fields keep their position. The file stays newline-terminated and
+greppable.
+
+An **item** record has exactly seven fields:
+
+```
+type␟label␟key␟command␟when␟minver␟desc        (␟ = the 0x1F byte)
+```
+
+| field | meaning |
+|---|---|
+| `type` | literal `item`. |
+| `label` | the menu label. May contain tmux `#{...}` format conditionals — passed to `display-menu` verbatim, so tmux evaluates them live at render time. |
+| `key` | the mnemonic (a single character or key spec). |
+| `command` | the tmux command run on click, exactly as `display-menu` should receive it (author it with ordinary single-quote shell quoting). |
+| `when` | *(optional)* a shell condition; run via `sh -c`. Non-zero exit → the item is left out when the menu is built. Empty → always included. |
+| `minver` | *(optional)* minimum tmux `MAJOR.MINOR`. If the running tmux is older, the item is left out. Empty → no version gate. |
+| `desc` | *(optional)* human cheatsheet text; ignored by the menu itself. |
+
+A line whose only field is the literal `sep` renders as a divider. Blank lines,
+lines beginning with `#`, and items missing a label or key are skipped.
+
+Authoring is easiest with two helpers at the top of the file:
+
+```sh
+US=$(printf '\037')
+item() { printf '%s%s%s%s%s%s%s%s%s%s%s%s%s\n' item "$US" "$1" "$US" "$2" "$US" "$3" "$US" "${4-}" "$US" "${5-}" "$US" "${6-}"; }
+sep()  { printf 'sep\n'; }
+
+# usage: item <label> <key> <command> [when] [minver] [desc] ; sep
+item 'Kill Pane' x 'kill-pane' '' '' 'close this pane'
+item '#{?window_zoomed_flag,Unzoom,Zoom}' z 'resize-pane -Z' '' '' 'zoom toggle'
+item 'Customize Options' c 'customize-mode -Z' '' '3.2' 'needs tmux 3.2'
+sep
+```
 
 ---
 
