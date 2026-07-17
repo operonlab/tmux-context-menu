@@ -1,22 +1,19 @@
 #!/usr/bin/env bash
 # shellcheck shell=bash
 #
-# tmux-context-menu — assemble and show the context menu.
+# tmux-context-menu — assemble the context menu (the single compile step).
 #
-# Bound (via run-shell) to the mouse right-click and the keyboard hotkey, so it
-# runs once per menu open. Building the menu here — instead of baking one fixed
-# list at load time — lets it react to what is true *right now*:
-#
-#   * version gate — items that need a newer tmux than is running are dropped,
-#     so an old tmux gets a shorter menu instead of a click that errors;
-#   * live state  — an item appears only when it applies to the pane the menu
-#     was opened over (Unzoom vs Zoom, Swap-with-marked, Respawn a dead pane).
+# 0.3.0: this script is a COMPILER, not a display path. build-menu.sh runs it
+# once at plugin load (--print) and bakes the output into DIRECT display-menu
+# bindings. A menu opened via run-shell carries no mouse event, and tmux can
+# then neither position it (`-x M` resolves to nothing → 0,0), keep it open
+# past the button release, nor track hover (MENU_NOMOUSE, menu.c:332) — the
+# per-open mouse/key display modes were unfixable by construction and are gone.
+# Live-state dynamics live in #{...} format conditionals expanded by
+# display-menu at open time, exactly like tmux's own built-in menus.
 #
 # Modes (first argument):
-#   mouse    show the menu at the mouse pointer   (-x M -y M)
-#   key      show the menu near the status line   (-x W -y S)   [default]
-#   --print  print the assembled menu, one field per line, and exit — used by
-#            the test suite to inspect the built menu without an attached client.
+#   --print  print the assembled menu, one field per line  [default]
 #
 # No `set -e` / `set -u`: runs from tmux run-shell context and must fail quietly
 # rather than abort tmux.
@@ -25,9 +22,8 @@ CURRENT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=scripts/helpers.sh
 . "$CURRENT_DIR/helpers.sh"
 
-mode="${1:-key}"
+mode="${1:---print}"
 
-MENU_TITLE='#[align=centre]#{window_index}:#{window_name}'
 
 # --- running tmux version ----------------------------------------------------
 # CONTEXT_MENU_FORCE_VERSION overrides the detected version; it exists only so
@@ -38,9 +34,9 @@ ver="${CONTEXT_MENU_FORCE_VERSION:-$(tmux_version)}"
 # --- options -----------------------------------------------------------------
 opt_extra="$(get_tmux_option @context-menu-extra "")"
 # @context-menu-source: a single file that, when set and readable, supplies the
-# *entire* core menu body (replacing the built-in list below). It is read here
-# per open — never by build-menu.sh — so edits take effect on the next menu open
-# without a plugin reload.
+# *entire* core menu body (replacing the built-in list below). Since 0.3.0 it is
+# read ONCE at plugin load (build-menu.sh compiles the output into the bindings)
+# — edits take effect on the next plugin reload (prefix+r), not per open.
 #
 # SECURITY: when set, this file is EXECUTED to produce the menu records, and any
 # per-item `when` condition runs via `sh -c`. Same trust model as
@@ -92,19 +88,9 @@ if [ -n "$opt_source" ] && [ -r "$opt_source" ]; then
 		menu+=( "$label" "$key" "$command" )
 	done <<< "$src_raw"
 else
-	# --- live state (one query) ----------------------------------------------
-	# A single display-message round-trip, evaluated against the active pane (the
-	# one the menu was opened over), parsed into shell flags. Only needed by the
-	# built-in list, so it lives here rather than at the top of the script.
-	state="$(tmux display-message -p '#{window_zoomed_flag} #{pane_dead} #{pane_marked_set}' 2>/dev/null)"
-	st_zoomed="${state%% *}"
-	state_rest="${state#* }"
-	st_dead="${state_rest%% *}"
-	st_marked="${state_rest##* }"
-	[ -z "$st_zoomed" ] && st_zoomed=0
-	[ -z "$st_dead" ] && st_dead=0
-	[ -z "$st_marked" ] && st_marked=0
-
+	# Built-in list. State-dependent items use #{...} format conditionals —
+	# expanded by display-menu at OPEN time — never a shell-time state query:
+	# the compiled binding must stay correct for every future open.
 	menu+=( "Horizontal Split" h "split-window -h -c '#{pane_current_path}'" )
 	menu+=( "Vertical Split"   v "split-window -v -c '#{pane_current_path}'" )
 
@@ -125,25 +111,16 @@ else
 	menu+=( "" )
 	menu+=( "Swap Up"   u "swap-pane -U" )
 	menu+=( "Swap Down" d "swap-pane -D" )
-	# Live: only when a pane is marked somewhere on the server. `swap-pane` with no
-	# source/target swaps the active pane with the marked one.
-	if [ "$st_marked" = "1" ]; then
-		menu+=( "Swap with marked pane" S "swap-pane" )
-	fi
-	# Live: show the zoom action that applies to the current state, not both.
-	if [ "$st_zoomed" = "1" ]; then
-		menu+=( "Unzoom" z "resize-pane -Z" )
-	else
-		menu+=( "Zoom" z "resize-pane -Z" )
-	fi
+	# A leading `-` in the expanded label greys the item out (tmux native
+	# convention, same as the built-in M-MouseDown3Pane menu): swap needs a
+	# marked pane, respawn needs a dead one.
+	menu+=( "#{?pane_marked_set,,-}Swap with marked pane" S "swap-pane" )
+	menu+=( "#{?window_zoomed_flag,Unzoom,Zoom}" z "resize-pane -Z" )
 
 	menu+=( "" )
 	menu+=( "Kill Pane"   x "kill-pane" )
 	menu+=( "Kill Window" X "kill-window" )
-	# Live: respawning only makes sense once the pane's process has exited (dead).
-	if [ "$st_dead" = "1" ]; then
-		menu+=( "Respawn Pane" r "respawn-pane -k" )
-	fi
+	menu+=( "#{?pane_dead,,-}Respawn Pane" r "respawn-pane -k" )
 
 	menu+=( "" )
 	menu+=( "New Window"     n "new-window" )
@@ -200,11 +177,12 @@ case "$mode" in
 			printf '%s\n' "$el"
 		done
 		;;
-	mouse)
-		tmux display-menu -T "$MENU_TITLE" -x M -y M "${menu[@]}"
-		;;
 	*)
-		tmux display-menu -T "$MENU_TITLE" -x W -y S "${menu[@]}"
+		# 0.3.0 removed the per-open mouse/key display modes: run-shell loses
+		# the mouse event, and display-menu can then neither position at the
+		# pointer nor keep native press/hover/click handling. The menu is now
+		# compiled into a direct binding by build-menu.sh at plugin load.
+		tmux display-message "context-menu: '$mode' mode removed in 0.3.0 — reload the plugin to rebuild the bindings" 2>/dev/null
 		;;
 esac
 

@@ -4,6 +4,34 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-07-17
+
+### Changed (breaking)
+- **The menu is now COMPILED into direct `display-menu` bindings at plugin
+  load** instead of being assembled per open through `run-shell`. A run-shell
+  hop strips the originating mouse event, after which tmux can neither position
+  the menu (`-x M` resolves to nothing — it opened at the top-left), keep it
+  open past the button release (you had to hold the right button), nor track
+  hover (`MENU_NOMOUSE` dismissed it on the first motion event). Direct
+  bindings keep the event, so position / press / hover / click behave exactly
+  like tmux's own built-in menus — which are constructed the same way.
+- `show-menu.sh` is now the compile step only (`--print`); its per-open
+  `mouse` / `key` display modes are removed. Anything binding those modes
+  directly should rebind to the plugin-managed entry points.
+- `@context-menu-source` and its `when` / `minver` gates are evaluated at
+  **load time**; edits apply on the next plugin reload, not the next open.
+- The compiled bindings are click-style: `-O` (tmux 3.2+) keeps the menu open
+  when the opening right-click is released — without it the release counts as
+  "released outside an item" and dismisses the menu instantly (upstream
+  behavior; tmux/tmux#4220, #2439 — the wiki-recommended fix is exactly `-O`).
+  The keyboard menu additionally gets `-M` (tmux 3.5+) so hovering it with the
+  mouse highlights instead of dismissing (no originating mouse event →
+  `MENU_NOMOUSE` otherwise).
+- Built-in live-state items are now display-time `#{...}` conditionals:
+  `Zoom`/`Unzoom` is one conditional label, and `Swap with marked pane` /
+  `Respawn Pane` grey out (leading `-`) until they apply, instead of appearing
+  and disappearing.
+
 ## [0.2.0] - 2026-07-16
 
 ### Added

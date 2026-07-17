@@ -66,40 +66,16 @@ assert_false "3.2 >= 3.10"         version_ge 3.2 3.10
 # ---------------------------------------------------------------------------
 tmux -L "$SOCK" -f /dev/null new-session -d -x 200 -y 50
 
-echo "== live state: plain pane =="
+echo "== built-in state items are display-time format conditionals =="
+# 0.3.0: the binding is compiled once, so state-dependent items must be #{...}
+# conditionals expanded by display-menu at OPEN time — never shell-time queries
+# baked into a stale binding.
 menu="$(build)"
-assert_true  "Zoom present when not zoomed"        grep -qx "Zoom" <<<"$menu"
-assert_false "Unzoom absent when not zoomed"       grep -qx "Unzoom" <<<"$menu"
-assert_false "Swap-with-marked absent, no mark"    grep -qx "Swap with marked pane" <<<"$menu"
-assert_false "Respawn absent, pane alive"          grep -qx "Respawn Pane" <<<"$menu"
-
-echo "== live state: zoomed window (needs 2 panes) =="
-tmux -L "$SOCK" split-window -h
-tmux -L "$SOCK" resize-pane -Z
-menu="$(build)"
-assert_true  "Unzoom present when zoomed"          grep -qx "Unzoom" <<<"$menu"
-assert_false "Zoom absent when zoomed"             grep -qx "Zoom" <<<"$menu"
-tmux -L "$SOCK" resize-pane -Z   # back to unzoomed
-
-echo "== live state: a pane is marked =="
-tmux -L "$SOCK" select-pane -m
-menu="$(build)"
-assert_true  "Swap-with-marked present when a pane is marked" grep -qx "Swap with marked pane" <<<"$menu"
-tmux -L "$SOCK" select-pane -M   # unmark
-menu="$(build)"
-assert_false "Swap-with-marked gone after unmark"  grep -qx "Swap with marked pane" <<<"$menu"
-
-echo "== live state: dead pane =="
-tmux -L "$SOCK" set -g remain-on-exit on
-tmux -L "$SOCK" split-window -h
-sleep 0.2
-tmux -L "$SOCK" send-keys 'exit' Enter   # the active (new) pane exits -> dead
-sleep 0.4
-dead="$(tmux -L "$SOCK" list-panes -F '#{pane_dead} #{pane_id}' | awk '$1==1{print $2; exit}')"
-tmux -L "$SOCK" select-pane -t "$dead"
-menu="$(build)"
-assert_true  "Respawn present for a dead pane"     grep -qx "Respawn Pane" <<<"$menu"
-tmux -L "$SOCK" kill-pane -t "$dead" 2>/dev/null
+assert_true  "zoom/unzoom is one conditional item"  grep -qx '#{?window_zoomed_flag,Unzoom,Zoom}' <<<"$menu"
+assert_false "no shell-time static Zoom label"      grep -qx "Zoom" <<<"$menu"
+assert_true  "swap-with-marked greys via -prefix"   grep -qx '#{?pane_marked_set,,-}Swap with marked pane' <<<"$menu"
+assert_true  "respawn greys until the pane is dead" grep -qx '#{?pane_dead,,-}Respawn Pane' <<<"$menu"
+assert_true  "mark/unmark stays format-based"       grep -qx '#{?pane_marked,Unmark,Mark}' <<<"$menu"
 
 echo "== version gate: Customize Options =="
 tmux -L "$SOCK" set-environment -g CONTEXT_MENU_FORCE_VERSION 3.1
@@ -203,16 +179,51 @@ tmux -L "$SOCK" set -g @context-menu-key M-q
 tmux -L "$SOCK" set -g @context-menu-mouse-copy on
 tmux -L "$SOCK" run-shell "$REPO/context-menu.tmux"
 sleep 0.2
-assert_true  "MouseDown3Pane -> run-shell show-menu" \
+assert_true  "MouseDown3Pane is a DIRECT display-menu (native mouse handling)" \
+	bash -c 'tmux -L "$0" list-keys -T root | grep -F MouseDown3Pane | grep -v M-MouseDown3Pane | grep -q "display-menu"' "$SOCK"
+assert_false "no run-shell hop on the mouse path" \
 	bash -c 'tmux -L "$0" list-keys -T root | grep -F MouseDown3Pane | grep -q "show-menu.sh"' "$SOCK"
-assert_true  "M-q -> run-shell show-menu" \
-	bash -c 'tmux -L "$0" list-keys | grep -F "M-q" | grep -q "show-menu.sh"' "$SOCK"
+assert_true  "mouse binding positions at the pointer (-x M -y M)" \
+	bash -c 'tmux -L "$0" list-keys -T root | grep -F MouseDown3Pane | grep -v M-MouseDown3Pane | grep -q -- "-x M -y M"' "$SOCK"
+assert_true  "compiled binding carries a core item" \
+	bash -c 'tmux -L "$0" list-keys -T root | grep -F MouseDown3Pane | grep -q "Horizontal Split"' "$SOCK"
+assert_true  "M-q is a DIRECT display-menu at -x W -y S" \
+	bash -c 'tmux -L "$0" list-keys | grep -F "M-q" | grep -q -- "-x W -y S"' "$SOCK"
+assert_true  "mouse menu is click-style (-O: release keeps it open)" \
+	bash -c 'tmux -L "$0" list-keys -T root | grep -F MouseDown3Pane | grep -v M-MouseDown3Pane | grep -q -- " -O "' "$SOCK"
+assert_true  "keyboard menu gets mouse handling (-M, tmux >= 3.5; serialized merged as -MO)" \
+	bash -c 'tmux -L "$0" list-keys | grep -F "M-q" | grep -q -- " -MO "' "$SOCK"
 assert_true  "copy module root double-click bound" \
 	bash -c 'tmux -L "$0" list-keys -T root | grep -qE "DoubleClick1Pane[[:space:]]+select-pane -t ="' "$SOCK"
 tmux -L "$SOCK" run-shell "$REPO/scripts/teardown.sh"
 sleep 0.2
 assert_false "MouseDown3Pane removed after teardown" \
 	bash -c 'tmux -L "$0" list-keys -T root | grep -qE "^bind-key +-T root +MouseDown3Pane "' "$SOCK"
+
+echo "== source mode compiles into the binding at load =="
+write_fixture ""
+tmux -L "$SOCK" set -g @context-menu-source "$FIXTURE"
+tmux -L "$SOCK" run-shell "$REPO/context-menu.tmux"
+sleep 0.2
+assert_true  "fixture item baked into the binding" \
+	bash -c 'tmux -L "$0" list-keys -T root | grep -F MouseDown3Pane | grep -q "Fixture Plain"' "$SOCK"
+assert_false "built-in replaced in the compiled binding" \
+	bash -c 'tmux -L "$0" list-keys -T root | grep -F MouseDown3Pane | grep -v M-MouseDown3Pane | grep -q "Horizontal Split"' "$SOCK"
+tmux -L "$SOCK" set -gu @context-menu-source
+
+echo "== version gate applies at BIND time =="
+tmux -L "$SOCK" set-environment -g CONTEXT_MENU_FORCE_VERSION 3.1
+tmux -L "$SOCK" run-shell "$REPO/context-menu.tmux"
+sleep 0.2
+assert_false "Customize Options absent from a 3.1 compile" \
+	bash -c 'tmux -L "$0" list-keys -T root | grep -F MouseDown3Pane | grep -q "Customize Options"' "$SOCK"
+assert_false "-O omitted on a 3.1 compile (needs 3.2)" \
+	bash -c 'tmux -L "$0" list-keys -T root | grep -F MouseDown3Pane | grep -v M-MouseDown3Pane | grep -q -- " -O "' "$SOCK"
+tmux -L "$SOCK" set-environment -gu CONTEXT_MENU_FORCE_VERSION
+tmux -L "$SOCK" run-shell "$REPO/context-menu.tmux"
+sleep 0.2
+assert_true  "Customize Options back on the real version" \
+	bash -c 'tmux -L "$0" list-keys -T root | grep -F MouseDown3Pane | grep -q "Customize Options"' "$SOCK"
 
 echo
 if [ "$fail" -eq 0 ]; then
