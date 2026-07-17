@@ -4,6 +4,18 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] - 2026-07-17
+
+### Fixed
+- Right-click menu opened at the top-left corner instead of the mouse pointer:
+  `display-menu -x M -y M` runs after a `run-shell` hop with no mouse event,
+  so `M` resolved to nothing. The mouse binding now forwards `#{mouse_x}`,
+  `#{mouse_y}` and `#{pane_id}` (expanded while the event still exists);
+  `show-menu.sh` positions the menu with the real coordinates and targets the
+  clicked pane — the live-state flags (zoom/marked/dead) and every menu
+  command now apply to the pane under the pointer, not the focused one.
+  Missing coordinates degrade to the old `M`/`M` behavior.
+
 ## [0.2.0] - 2026-07-16
 
 ### Added
