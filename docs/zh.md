@@ -85,7 +85,7 @@ run-shell '~/.tmux/plugins/tmux-context-menu/context-menu.tmux'
 | `@context-menu-mouse-copy` | `off` | 加入「雙擊選字、三擊選行、複製且畫面不跳走」。因為會改變點擊行為，所以預設關閉。 |
 | `@context-menu-copy-command` | `''`（空） | 只在 `@context-menu-mouse-copy` 為 `on` 時有用。留空＝複製到 tmux 自己的剪貼簿；填指令（例：macOS 用 `pbcopy`、Linux 用 `xclip -sel clip`）就會同時複製到系統剪貼簿。 |
 | `@context-menu-extra` | `''`（空） | 自訂選單項目，請先看下面的警告。 |
-| `@context-menu-source` | `''`（空） | 指向一個「印出整份選單」的檔案（每列一筆記錄），用它**取代**內建清單（`@context-menu-extra` 仍會接在後面附加）。每次開啟選單時都會讀取並**執行**這個檔案。詳見下方「單一來源選單項目」，包含 ⚠️ 警告：這個選項會**執行該檔案**。 |
+| `@context-menu-source` | `''`（空） | 指向一個「印出整份選單」的檔案（每列一筆記錄），用它**取代**內建清單（`@context-menu-extra` 仍會接在後面附加）。插件載入時讀取並**執行**一次，編譯進綁定——改檔後 `prefix`+`r` 重載生效。詳見下方「單一來源選單項目」，包含 ⚠️ 警告：這個選項會**執行該檔案**。 |
 
 ### 自訂選單項目（`@context-menu-extra`）
 
@@ -110,7 +110,7 @@ tmux 設定（按 `Q`）。
 set -g @context-menu-source '~/.tmux/menu-items.sh'
 ```
 
-> ⚠️ **這個選項會執行該檔案。** 每次開啟選單時，都會執行這個檔案並解析它的
+> ⚠️ **這個選項會執行該檔案。** 插件載入時會執行這個檔案並解析它的
 > 輸出；每一項的 `when` 條件（見下）會透過 `sh -c` 執行。信任模型與
 > `@context-menu-extra` 相同 —— 只指向你自己撰寫、掌控的檔案，絕不要用來路
 > 不明的檔案。

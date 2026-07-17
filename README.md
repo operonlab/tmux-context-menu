@@ -99,7 +99,7 @@ using `set -g`. All of them are optional — the defaults are sensible.
 | `@context-menu-mouse-copy` | `off` | Adds "double-click to select a word, triple-click to select a line, and copy — without scrolling away". It's off by default because it changes how clicks behave. |
 | `@context-menu-copy-command` | `''` (empty) | Only matters when `@context-menu-mouse-copy` is `on`. Leave empty to copy into tmux's own clipboard. Set it to a command (e.g. `pbcopy` on macOS, `xclip -sel clip` on Linux) to also copy to your system clipboard. |
 | `@context-menu-extra` | `''` (empty) | Add your own menu items. See the warning below. |
-| `@context-menu-source` | `''` (empty) | Point it at a file that prints the **whole** menu, one record per line, and it **replaces** the built-in list with yours (`@context-menu-extra` still appends after it). The file is read — and run — every time the menu opens. See "Single-source menu items" below, including the ⚠️ warning: this **executes the file**. |
+| `@context-menu-source` | `''` (empty) | Point it at a file that prints the **whole** menu, one record per line, and it **replaces** the built-in list with yours (`@context-menu-extra` still appends after it). The file is read — and run — once when the plugin loads; the compiled menu is baked into the binding, so edits apply on the next reload (`prefix`+`r`). See "Single-source menu items" below, including the ⚠️ warning: this **executes the file**. |
 
 ### Adding your own menu items (`@context-menu-extra`)
 
@@ -127,7 +127,7 @@ Point the option at that file:
 set -g @context-menu-source '~/.tmux/menu-items.sh'
 ```
 
-> ⚠️ **This option runs the file.** Every time the menu opens, the file is
+> ⚠️ **This option runs the file.** At plugin load, the file is
 > executed and its output parsed; any per-item `when` condition (below) is run
 > through `sh -c`. Same trust model as `@context-menu-extra` — only ever point
 > it at a file you wrote and control. Never use a file from an untrusted source.

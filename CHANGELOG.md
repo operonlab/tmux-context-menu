@@ -4,26 +4,26 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.2.1] - 2026-07-17
+## [0.3.0] - 2026-07-17
 
-### Fixed
-- Right-click menu opened at the top-left corner instead of the mouse pointer:
-  `display-menu -x M -y M` runs after a `run-shell` hop with no mouse event,
-  so `M` resolved to nothing. The mouse binding now forwards `#{mouse_x}`,
-  `#{mouse_y}` and `#{pane_id}` (expanded while the event still exists);
-  `show-menu.sh` positions the menu with the real coordinates and targets the
-  clicked pane — the live-state flags (zoom/marked/dead) and every menu
-  command now apply to the pane under the pointer, not the focused one.
-  Missing coordinates degrade to the old `M`/`M` behavior. The forwarded
-  coordinates are PANE-RELATIVE (`format_cb_mouse_x` → `cmd_mouse_at` strips
-  the pane offset), so show-menu.sh translates them back to client-absolute
-  with the clicked pane's `#{pane_left}`/`#{pane_top}` plus the status rows
-  when the status bar sits at the top.
-- Hovering over the menu instantly dismissed it: a menu opened via `run-shell`
-  has no originating mouse event, so tmux flags it `MENU_NOMOUSE` — and under
-  `NOMOUSE` bare motion (release-encoded by the mouse protocol) closes the
-  menu. `display-menu -M` (tmux 3.5+, version-gated) forces mouse handling
-  back on; hover-highlight and click-to-select work again.
+### Changed (breaking)
+- **The menu is now COMPILED into direct `display-menu` bindings at plugin
+  load** instead of being assembled per open through `run-shell`. A run-shell
+  hop strips the originating mouse event, after which tmux can neither position
+  the menu (`-x M` resolves to nothing — it opened at the top-left), keep it
+  open past the button release (you had to hold the right button), nor track
+  hover (`MENU_NOMOUSE` dismissed it on the first motion event). Direct
+  bindings keep the event, so position / press / hover / click behave exactly
+  like tmux's own built-in menus — which are constructed the same way.
+- `show-menu.sh` is now the compile step only (`--print`); its per-open
+  `mouse` / `key` display modes are removed. Anything binding those modes
+  directly should rebind to the plugin-managed entry points.
+- `@context-menu-source` and its `when` / `minver` gates are evaluated at
+  **load time**; edits apply on the next plugin reload, not the next open.
+- Built-in live-state items are now display-time `#{...}` conditionals:
+  `Zoom`/`Unzoom` is one conditional label, and `Swap with marked pane` /
+  `Respawn Pane` grey out (leading `-`) until they apply, instead of appearing
+  and disappearing.
 
 ## [0.2.0] - 2026-07-16
 

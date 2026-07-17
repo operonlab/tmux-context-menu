@@ -66,40 +66,16 @@ assert_false "3.2 >= 3.10"         version_ge 3.2 3.10
 # ---------------------------------------------------------------------------
 tmux -L "$SOCK" -f /dev/null new-session -d -x 200 -y 50
 
-echo "== live state: plain pane =="
+echo "== built-in state items are display-time format conditionals =="
+# 0.3.0: the binding is compiled once, so state-dependent items must be #{...}
+# conditionals expanded by display-menu at OPEN time — never shell-time queries
+# baked into a stale binding.
 menu="$(build)"
-assert_true  "Zoom present when not zoomed"        grep -qx "Zoom" <<<"$menu"
-assert_false "Unzoom absent when not zoomed"       grep -qx "Unzoom" <<<"$menu"
-assert_false "Swap-with-marked absent, no mark"    grep -qx "Swap with marked pane" <<<"$menu"
-assert_false "Respawn absent, pane alive"          grep -qx "Respawn Pane" <<<"$menu"
-
-echo "== live state: zoomed window (needs 2 panes) =="
-tmux -L "$SOCK" split-window -h
-tmux -L "$SOCK" resize-pane -Z
-menu="$(build)"
-assert_true  "Unzoom present when zoomed"          grep -qx "Unzoom" <<<"$menu"
-assert_false "Zoom absent when zoomed"             grep -qx "Zoom" <<<"$menu"
-tmux -L "$SOCK" resize-pane -Z   # back to unzoomed
-
-echo "== live state: a pane is marked =="
-tmux -L "$SOCK" select-pane -m
-menu="$(build)"
-assert_true  "Swap-with-marked present when a pane is marked" grep -qx "Swap with marked pane" <<<"$menu"
-tmux -L "$SOCK" select-pane -M   # unmark
-menu="$(build)"
-assert_false "Swap-with-marked gone after unmark"  grep -qx "Swap with marked pane" <<<"$menu"
-
-echo "== live state: dead pane =="
-tmux -L "$SOCK" set -g remain-on-exit on
-tmux -L "$SOCK" split-window -h
-sleep 0.2
-tmux -L "$SOCK" send-keys 'exit' Enter   # the active (new) pane exits -> dead
-sleep 0.4
-dead="$(tmux -L "$SOCK" list-panes -F '#{pane_dead} #{pane_id}' | awk '$1==1{print $2; exit}')"
-tmux -L "$SOCK" select-pane -t "$dead"
-menu="$(build)"
-assert_true  "Respawn present for a dead pane"     grep -qx "Respawn Pane" <<<"$menu"
-tmux -L "$SOCK" kill-pane -t "$dead" 2>/dev/null
+assert_true  "zoom/unzoom is one conditional item"  grep -qx '#{?window_zoomed_flag,Unzoom,Zoom}' <<<"$menu"
+assert_false "no shell-time static Zoom label"      grep -qx "Zoom" <<<"$menu"
+assert_true  "swap-with-marked greys via -prefix"   grep -qx '#{?pane_marked_set,,-}Swap with marked pane' <<<"$menu"
+assert_true  "respawn greys until the pane is dead" grep -qx '#{?pane_dead,,-}Respawn Pane' <<<"$menu"
+assert_true  "mark/unmark stays format-based"       grep -qx '#{?pane_marked,Unmark,Mark}' <<<"$menu"
 
 echo "== version gate: Customize Options =="
 tmux -L "$SOCK" set-environment -g CONTEXT_MENU_FORCE_VERSION 3.1
@@ -203,10 +179,16 @@ tmux -L "$SOCK" set -g @context-menu-key M-q
 tmux -L "$SOCK" set -g @context-menu-mouse-copy on
 tmux -L "$SOCK" run-shell "$REPO/context-menu.tmux"
 sleep 0.2
-assert_true  "MouseDown3Pane -> run-shell show-menu" \
+assert_true  "MouseDown3Pane is a DIRECT display-menu (native mouse handling)" \
+	bash -c 'tmux -L "$0" list-keys -T root | grep -F MouseDown3Pane | grep -v M-MouseDown3Pane | grep -q "display-menu"' "$SOCK"
+assert_false "no run-shell hop on the mouse path" \
 	bash -c 'tmux -L "$0" list-keys -T root | grep -F MouseDown3Pane | grep -q "show-menu.sh"' "$SOCK"
-assert_true  "M-q -> run-shell show-menu" \
-	bash -c 'tmux -L "$0" list-keys | grep -F "M-q" | grep -q "show-menu.sh"' "$SOCK"
+assert_true  "mouse binding positions at the pointer (-x M -y M)" \
+	bash -c 'tmux -L "$0" list-keys -T root | grep -F MouseDown3Pane | grep -v M-MouseDown3Pane | grep -q -- "-x M -y M"' "$SOCK"
+assert_true  "compiled binding carries a core item" \
+	bash -c 'tmux -L "$0" list-keys -T root | grep -F MouseDown3Pane | grep -q "Horizontal Split"' "$SOCK"
+assert_true  "M-q is a DIRECT display-menu at -x W -y S" \
+	bash -c 'tmux -L "$0" list-keys | grep -F "M-q" | grep -q -- "-x W -y S"' "$SOCK"
 assert_true  "copy module root double-click bound" \
 	bash -c 'tmux -L "$0" list-keys -T root | grep -qE "DoubleClick1Pane[[:space:]]+select-pane -t ="' "$SOCK"
 tmux -L "$SOCK" run-shell "$REPO/scripts/teardown.sh"
@@ -214,71 +196,28 @@ sleep 0.2
 assert_false "MouseDown3Pane removed after teardown" \
 	bash -c 'tmux -L "$0" list-keys -T root | grep -qE "^bind-key +-T root +MouseDown3Pane "' "$SOCK"
 
-echo "== mouse position: binding forwards event coords; display-menu uses them =="
-# The mouse binding must expand #{mouse_x}/#{mouse_y}/#{pane_id} at event time —
-# after the run-shell hop display-menu has no mouse context, so `-x M -y M`
-# lands the menu at 0,0 (the 2026-07-17 top-left regression).
+echo "== source mode compiles into the binding at load =="
+write_fixture ""
+tmux -L "$SOCK" set -g @context-menu-source "$FIXTURE"
 tmux -L "$SOCK" run-shell "$REPO/context-menu.tmux"
 sleep 0.2
-assert_true  "mouse binding forwards mouse_x/mouse_y/pane_id" \
-	bash -c 'tmux -L "$0" list-keys -T root | grep -F MouseDown3Pane | grep -q "mouse_x" && tmux -L "$0" list-keys -T root | grep -F MouseDown3Pane | grep -q "pane_id"' "$SOCK"
+assert_true  "fixture item baked into the binding" \
+	bash -c 'tmux -L "$0" list-keys -T root | grep -F MouseDown3Pane | grep -q "Fixture Plain"' "$SOCK"
+assert_false "built-in replaced in the compiled binding" \
+	bash -c 'tmux -L "$0" list-keys -T root | grep -F MouseDown3Pane | grep -v M-MouseDown3Pane | grep -q "Horizontal Split"' "$SOCK"
+tmux -L "$SOCK" set -gu @context-menu-source
 
-# Capture the display-menu argv through a PATH shim: display-menu calls are
-# logged, everything else is delegated to the real test server so the builder's
-# option/state queries still work. TMUX stays unset (never the live server).
-SHIMD="$FIXTURE_DIR/shim"; CAP="$FIXTURE_DIR/display-args"; mkdir -p "$SHIMD"
-REAL_TMUX="$(command -v tmux)"
-cat > "$SHIMD/tmux" <<SHIM
-#!/usr/bin/env bash
-if [ "\$1" = "display-menu" ]; then printf '%s\n' "\$@" > "$CAP"; exit 0; fi
-exec "$REAL_TMUX" -L "$SOCK" "\$@"
-SHIM
-chmod +x "$SHIMD/tmux"
-
-PATH="$SHIMD:$PATH" bash "$SHOW" mouse 12 34 %0 >/dev/null 2>&1
-assert_true  "explicit coords reach display-menu (-x 12 -y 34)" \
-	bash -c 'grep -qx -- "-x" "$0" && grep -qx "12" "$0" && grep -qx "34" "$0"' "$CAP"
-assert_true  "clicked pane reaches display-menu (-t %0)" \
-	bash -c 'grep -qx -- "-t" "$0" && grep -qx "%0" "$0"' "$CAP"
-
-rm -f "$CAP"
-PATH="$SHIMD:$PATH" bash "$SHOW" mouse >/dev/null 2>&1
-assert_true  "missing coords degrade to -x M -y M (legacy fallback)" \
-	bash -c 'grep -qx "M" "$0"' "$CAP"
-
-# #{mouse_x}/#{mouse_y} are pane-relative; the final -x/-y must be translated
-# back to client-absolute by the clicked pane's offsets (+ top status rows).
-# A right-hand pane has pane_left > 0 — the discriminating case.
-tmux -L "$SOCK" split-window -h
-rp="$(tmux -L "$SOCK" list-panes -F '#{pane_left} #{pane_id}' | sort -rn | head -1)"
-rp_left="${rp%% *}"; rp_id="${rp##* }"
-rm -f "$CAP"
-PATH="$SHIMD:$PATH" bash "$SHOW" mouse 12 34 "$rp_id" >/dev/null 2>&1
-assert_true  "pane-relative x translated by pane_left (right pane)" \
-	bash -c 'grep -qx "$1" "$0"' "$CAP" "$(( 12 + rp_left ))"
-assert_true  "y unchanged with bottom status (pane_top 0)" \
-	bash -c 'grep -qx "34" "$0"' "$CAP"
-
-# Status at the TOP shifts the whole window down — y must gain the status rows.
-tmux -L "$SOCK" set -g status-position top
-rm -f "$CAP"
-PATH="$SHIMD:$PATH" bash "$SHOW" mouse 12 34 "$rp_id" >/dev/null 2>&1
-assert_true  "top status adds its rows to y (34 -> 35)" \
-	bash -c 'grep -qx "35" "$0"' "$CAP"
-tmux -L "$SOCK" set -g status-position bottom
-tmux -L "$SOCK" kill-pane -t "$rp_id" 2>/dev/null
-
-# Without an originating mouse event tmux flags the menu MENU_NOMOUSE and bare
-# hover-motion (release-encoded) instantly closes it — `-M` (tmux 3.5+) forces
-# mouse handling back on. Version-gated: a forced 3.4 must NOT emit -M.
-rm -f "$CAP"
-PATH="$SHIMD:$PATH" bash "$SHOW" mouse 12 34 %0 >/dev/null 2>&1
-assert_true  "-M forced on (hover must not dismiss; tmux >= 3.5)" \
-	bash -c 'grep -qx -- "-M" "$0"' "$CAP"
-rm -f "$CAP"
-CONTEXT_MENU_FORCE_VERSION=3.4 PATH="$SHIMD:$PATH" bash "$SHOW" mouse 12 34 %0 >/dev/null 2>&1
-assert_false "-M omitted on tmux 3.4 (flag needs 3.5)" \
-	bash -c 'grep -qx -- "-M" "$0"' "$CAP"
+echo "== version gate applies at BIND time =="
+tmux -L "$SOCK" set-environment -g CONTEXT_MENU_FORCE_VERSION 3.1
+tmux -L "$SOCK" run-shell "$REPO/context-menu.tmux"
+sleep 0.2
+assert_false "Customize Options absent from a 3.1 compile" \
+	bash -c 'tmux -L "$0" list-keys -T root | grep -F MouseDown3Pane | grep -q "Customize Options"' "$SOCK"
+tmux -L "$SOCK" set-environment -gu CONTEXT_MENU_FORCE_VERSION
+tmux -L "$SOCK" run-shell "$REPO/context-menu.tmux"
+sleep 0.2
+assert_true  "Customize Options back on the real version" \
+	bash -c 'tmux -L "$0" list-keys -T root | grep -F MouseDown3Pane | grep -q "Customize Options"' "$SOCK"
 
 echo
 if [ "$fail" -eq 0 ]; then

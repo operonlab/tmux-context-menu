@@ -6,10 +6,10 @@
 # Invoked once at plugin load (from context-menu.tmux) and safe to re-run at any
 # time (bind-key overwrites, so rebuilding is idempotent).
 #
-# The menu body itself is assembled per open by scripts/show-menu.sh (bound via
-# run-shell), so it can react to the running tmux version and to live pane state
-# each time it opens. This file only reads the bind-time options and wires the
-# entry points, the status-click guard and the optional copy module.
+# The menu body is compiled at load time by scripts/show-menu.sh (--print) and
+# baked into DIRECT display-menu bindings — see the compile block below for why
+# (run-shell strips the mouse event). This file wires the entry points, the
+# status-click guard and the optional copy module.
 #
 # No `set -e` / `set -u`: this runs from tmux load context and must fail quietly
 # rather than abort tmux.
@@ -39,27 +39,37 @@ opt_status="$(get_tmux_option @context-menu-disable-status-clicks on)"
 opt_copy="$(get_tmux_option @context-menu-mouse-copy off)"
 opt_copy_cmd="$(get_tmux_option @context-menu-copy-command "")"
 
-# --- bind the entry points ---------------------------------------------------
-# Both entry points defer to show-menu.sh so the menu is (re)built at open time
-# against the current tmux version and live pane state. show-menu.sh's argument
-# selects where the menu pops up.
+# --- compile the menu ONCE, bind display-menu DIRECTLY ------------------------
+# 0.3.0 root fix: the menu body is compiled here at load time and baked into
+# direct display-menu bindings — never opened through run-shell. A run-shell hop
+# strips the originating mouse event, after which tmux can neither position the
+# menu (`-x M` resolves to nothing → 0,0), keep it open past the button release,
+# nor track hover (MENU_NOMOUSE, menu.c). A DIRECT mouse binding keeps the event:
+# -x M -y M positions at the pointer, the clicked pane is the native default
+# target, and press/hover/release behave exactly like tmux's own built-in menus
+# (which are built the same way: static args + #{...} display-time conditionals).
+# Consequence: @context-menu-source edits and when/minver gates apply on plugin
+# reload (prefix+r), not per open — live-state dynamics stay per-open via the
+# #{...} conditionals in item labels.
 SHOW_MENU="$CURRENT_DIR/show-menu.sh"
+MENU_TITLE='#[align=centre]#{window_index}:#{window_name}'
 
-# Mouse right-click, popped up at the pointer (show-menu.sh uses -x M -y M).
-if [ "$opt_mouse" = "on" ]; then
-	# The mouse coordinates and the clicked pane are expanded HERE, while the
-	# mouse event still exists — after the run-shell hop, display-menu is a brand
-	# new command with no mouse context, so `-x M -y M` inside show-menu.sh
-	# resolves to nothing and the menu lands at 0,0 (top-left). #{mouse_x}/
-	# #{mouse_y} carry the same client coordinates M would have used, and
-	# #{pane_id} is the pane under the pointer (a mouse binding's default
-	# target), so menu commands act on the clicked pane, not the focused one.
-	tmux bind-key -T root MouseDown3Pane run-shell -b "'$SHOW_MENU' mouse '#{mouse_x}' '#{mouse_y}' '#{pane_id}'"
-fi
+menu_args=()
+while IFS= read -r line || [ -n "$line" ]; do
+	menu_args+=( "$line" )
+done < <("$SHOW_MENU" --print 2>/dev/null)
 
-# Keyboard entry, popped up near the window/status position (-x W -y S).
-if [ -n "$opt_key" ]; then
-	tmux bind-key -n "$opt_key" run-shell -b "'$SHOW_MENU' key"
+# A menu needs at least one (label, key, command) triple; on a broken compile
+# leave the previous bindings alone rather than bind an empty menu.
+if [ ${#menu_args[@]} -ge 3 ]; then
+	# Mouse right-click, popped up at the pointer.
+	if [ "$opt_mouse" = "on" ]; then
+		tmux bind-key -T root MouseDown3Pane display-menu -T "$MENU_TITLE" -x M -y M "${menu_args[@]}"
+	fi
+	# Keyboard entry, popped up near the window/status position.
+	if [ -n "$opt_key" ]; then
+		tmux bind-key -n "$opt_key" display-menu -T "$MENU_TITLE" -x W -y S "${menu_args[@]}"
+	fi
 fi
 
 # --- disable status-bar right-clicks (avoid mis-taps) ------------------------
