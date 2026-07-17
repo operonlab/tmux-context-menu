@@ -246,6 +246,28 @@ PATH="$SHIMD:$PATH" bash "$SHOW" mouse >/dev/null 2>&1
 assert_true  "missing coords degrade to -x M -y M (legacy fallback)" \
 	bash -c 'grep -qx "M" "$0"' "$CAP"
 
+# #{mouse_x}/#{mouse_y} are pane-relative; the final -x/-y must be translated
+# back to client-absolute by the clicked pane's offsets (+ top status rows).
+# A right-hand pane has pane_left > 0 — the discriminating case.
+tmux -L "$SOCK" split-window -h
+rp="$(tmux -L "$SOCK" list-panes -F '#{pane_left} #{pane_id}' | sort -rn | head -1)"
+rp_left="${rp%% *}"; rp_id="${rp##* }"
+rm -f "$CAP"
+PATH="$SHIMD:$PATH" bash "$SHOW" mouse 12 34 "$rp_id" >/dev/null 2>&1
+assert_true  "pane-relative x translated by pane_left (right pane)" \
+	bash -c 'grep -qx "$1" "$0"' "$CAP" "$(( 12 + rp_left ))"
+assert_true  "y unchanged with bottom status (pane_top 0)" \
+	bash -c 'grep -qx "34" "$0"' "$CAP"
+
+# Status at the TOP shifts the whole window down — y must gain the status rows.
+tmux -L "$SOCK" set -g status-position top
+rm -f "$CAP"
+PATH="$SHIMD:$PATH" bash "$SHOW" mouse 12 34 "$rp_id" >/dev/null 2>&1
+assert_true  "top status adds its rows to y (34 -> 35)" \
+	bash -c 'grep -qx "35" "$0"' "$CAP"
+tmux -L "$SOCK" set -g status-position bottom
+tmux -L "$SOCK" kill-pane -t "$rp_id" 2>/dev/null
+
 echo
 if [ "$fail" -eq 0 ]; then
 	echo "ALL TESTS PASSED"

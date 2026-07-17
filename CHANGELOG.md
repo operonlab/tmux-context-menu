@@ -14,7 +14,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `show-menu.sh` positions the menu with the real coordinates and targets the
   clicked pane — the live-state flags (zoom/marked/dead) and every menu
   command now apply to the pane under the pointer, not the focused one.
-  Missing coordinates degrade to the old `M`/`M` behavior.
+  Missing coordinates degrade to the old `M`/`M` behavior. The forwarded
+  coordinates are PANE-RELATIVE (`format_cb_mouse_x` → `cmd_mouse_at` strips
+  the pane offset), so show-menu.sh translates them back to client-absolute
+  with the clicked pane's `#{pane_left}`/`#{pane_top}` plus the status rows
+  when the status bar sits at the top.
 
 ## [0.2.0] - 2026-07-16
 

@@ -224,7 +224,25 @@ case "$mode" in
 				tmux display-menu "${target[@]}" -T "$MENU_TITLE" -x M -y M "${menu[@]}"
 				;;
 			*)
-				tmux display-menu "${target[@]}" -T "$MENU_TITLE" -x "$mouse_x" -y "$mouse_y" "${menu[@]}"
+				# #{mouse_x}/#{mouse_y} are PANE-RELATIVE (format_cb_mouse_x →
+				# cmd_mouse_at strips the pane offset), while a numeric -x/-y is
+				# CLIENT-ABSOLUTE — translate back by the clicked pane's offsets,
+				# plus the status area when it sits at the TOP (cmd_mouse_at
+				# subtracts those lines too; with status at the bottom, zero).
+				offs="$(tmux display-message "${target[@]}" -p '#{pane_left} #{pane_top}' 2>/dev/null)"
+				pane_left="${offs%% *}"
+				pane_top="${offs##* }"
+				case "$pane_left$pane_top" in *[!0-9]* | '') pane_left=0 pane_top=0 ;; esac
+				status_rows=0
+				if [ "$(tmux show -gv status-position 2>/dev/null)" = "top" ]; then
+					case "$(tmux show -gv status 2>/dev/null)" in
+						on) status_rows=1 ;;
+						[2-5]) status_rows="$(tmux show -gv status)" ;;
+					esac
+				fi
+				tmux display-menu "${target[@]}" -T "$MENU_TITLE" \
+					-x "$(( mouse_x + pane_left ))" \
+					-y "$(( mouse_y + pane_top + status_rows ))" "${menu[@]}"
 				;;
 		esac
 		;;
