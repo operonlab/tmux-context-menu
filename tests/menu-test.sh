@@ -189,6 +189,10 @@ assert_true  "compiled binding carries a core item" \
 	bash -c 'tmux -L "$0" list-keys -T root | grep -F MouseDown3Pane | grep -q "Horizontal Split"' "$SOCK"
 assert_true  "M-q is a DIRECT display-menu at -x W -y S" \
 	bash -c 'tmux -L "$0" list-keys | grep -F "M-q" | grep -q -- "-x W -y S"' "$SOCK"
+assert_true  "mouse menu is click-style (-O: release keeps it open)" \
+	bash -c 'tmux -L "$0" list-keys -T root | grep -F MouseDown3Pane | grep -v M-MouseDown3Pane | grep -q -- " -O "' "$SOCK"
+assert_true  "keyboard menu gets mouse handling (-M, tmux >= 3.5; serialized merged as -MO)" \
+	bash -c 'tmux -L "$0" list-keys | grep -F "M-q" | grep -q -- " -MO "' "$SOCK"
 assert_true  "copy module root double-click bound" \
 	bash -c 'tmux -L "$0" list-keys -T root | grep -qE "DoubleClick1Pane[[:space:]]+select-pane -t ="' "$SOCK"
 tmux -L "$SOCK" run-shell "$REPO/scripts/teardown.sh"
@@ -213,6 +217,8 @@ tmux -L "$SOCK" run-shell "$REPO/context-menu.tmux"
 sleep 0.2
 assert_false "Customize Options absent from a 3.1 compile" \
 	bash -c 'tmux -L "$0" list-keys -T root | grep -F MouseDown3Pane | grep -q "Customize Options"' "$SOCK"
+assert_false "-O omitted on a 3.1 compile (needs 3.2)" \
+	bash -c 'tmux -L "$0" list-keys -T root | grep -F MouseDown3Pane | grep -v M-MouseDown3Pane | grep -q -- " -O "' "$SOCK"
 tmux -L "$SOCK" set-environment -gu CONTEXT_MENU_FORCE_VERSION
 tmux -L "$SOCK" run-shell "$REPO/context-menu.tmux"
 sleep 0.2

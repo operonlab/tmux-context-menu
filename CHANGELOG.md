@@ -20,6 +20,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   directly should rebind to the plugin-managed entry points.
 - `@context-menu-source` and its `when` / `minver` gates are evaluated at
   **load time**; edits apply on the next plugin reload, not the next open.
+- The compiled bindings are click-style: `-O` (tmux 3.2+) keeps the menu open
+  when the opening right-click is released — without it the release counts as
+  "released outside an item" and dismisses the menu instantly (upstream
+  behavior; tmux/tmux#4220, #2439 — the wiki-recommended fix is exactly `-O`).
+  The keyboard menu additionally gets `-M` (tmux 3.5+) so hovering it with the
+  mouse highlights instead of dismissing (no originating mouse event →
+  `MENU_NOMOUSE` otherwise).
 - Built-in live-state items are now display-time `#{...}` conditionals:
   `Zoom`/`Unzoom` is one conditional label, and `Swap with marked pane` /
   `Respawn Pane` grey out (leading `-`) until they apply, instead of appearing

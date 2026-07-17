@@ -53,22 +53,38 @@ opt_copy_cmd="$(get_tmux_option @context-menu-copy-command "")"
 # #{...} conditionals in item labels.
 SHOW_MENU="$CURRENT_DIR/show-menu.sh"
 MENU_TITLE='#[align=centre]#{window_index}:#{window_name}'
+ver="${CONTEXT_MENU_FORCE_VERSION:-$(tmux_version)}"
 
 menu_args=()
 while IFS= read -r line || [ -n "$line" ]; do
 	menu_args+=( "$line" )
 done < <("$SHOW_MENU" --print 2>/dev/null)
 
+# Click-style interaction needs -O (tmux 3.2+, MENU_STAYOPEN): without it the
+# menu is DRAG-style — the release of the very click that opened it counts as
+# "released outside an item" and dismisses the menu instantly (menu.c). With
+# -O the opening release is ignored, hover highlights, a click on an item
+# selects, and a press outside closes. Known edge: when the menu flips to fit
+# the screen edge the pointer can land ON an item, and the opening release
+# then selects it — the standard trade-off of click-style tmux menus.
+stay=()
+if version_ge "$ver" 3.2; then stay=(-O); fi
+# The keyboard menu has no originating mouse event, so tmux flags it
+# MENU_NOMOUSE (hover would dismiss it); -M (tmux 3.5+) turns mouse handling
+# on. The mouse menu carries its own event and never needs -M.
+kmouse=()
+if version_ge "$ver" 3.5; then kmouse=(-M); fi
+
 # A menu needs at least one (label, key, command) triple; on a broken compile
 # leave the previous bindings alone rather than bind an empty menu.
 if [ ${#menu_args[@]} -ge 3 ]; then
 	# Mouse right-click, popped up at the pointer.
 	if [ "$opt_mouse" = "on" ]; then
-		tmux bind-key -T root MouseDown3Pane display-menu -T "$MENU_TITLE" -x M -y M "${menu_args[@]}"
+		tmux bind-key -T root MouseDown3Pane display-menu "${stay[@]}" -T "$MENU_TITLE" -x M -y M "${menu_args[@]}"
 	fi
 	# Keyboard entry, popped up near the window/status position.
 	if [ -n "$opt_key" ]; then
-		tmux bind-key -n "$opt_key" display-menu -T "$MENU_TITLE" -x W -y S "${menu_args[@]}"
+		tmux bind-key -n "$opt_key" display-menu "${stay[@]}" "${kmouse[@]}" -T "$MENU_TITLE" -x W -y S "${menu_args[@]}"
 	fi
 fi
 
