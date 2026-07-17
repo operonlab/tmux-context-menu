@@ -268,6 +268,18 @@ assert_true  "top status adds its rows to y (34 -> 35)" \
 tmux -L "$SOCK" set -g status-position bottom
 tmux -L "$SOCK" kill-pane -t "$rp_id" 2>/dev/null
 
+# Without an originating mouse event tmux flags the menu MENU_NOMOUSE and bare
+# hover-motion (release-encoded) instantly closes it — `-M` (tmux 3.5+) forces
+# mouse handling back on. Version-gated: a forced 3.4 must NOT emit -M.
+rm -f "$CAP"
+PATH="$SHIMD:$PATH" bash "$SHOW" mouse 12 34 %0 >/dev/null 2>&1
+assert_true  "-M forced on (hover must not dismiss; tmux >= 3.5)" \
+	bash -c 'grep -qx -- "-M" "$0"' "$CAP"
+rm -f "$CAP"
+CONTEXT_MENU_FORCE_VERSION=3.4 PATH="$SHIMD:$PATH" bash "$SHOW" mouse 12 34 %0 >/dev/null 2>&1
+assert_false "-M omitted on tmux 3.4 (flag needs 3.5)" \
+	bash -c 'grep -qx -- "-M" "$0"' "$CAP"
+
 echo
 if [ "$fail" -eq 0 ]; then
 	echo "ALL TESTS PASSED"

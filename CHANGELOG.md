@@ -19,6 +19,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the pane offset), so show-menu.sh translates them back to client-absolute
   with the clicked pane's `#{pane_left}`/`#{pane_top}` plus the status rows
   when the status bar sits at the top.
+- Hovering over the menu instantly dismissed it: a menu opened via `run-shell`
+  has no originating mouse event, so tmux flags it `MENU_NOMOUSE` — and under
+  `NOMOUSE` bare motion (release-encoded by the mouse protocol) closes the
+  menu. `display-menu -M` (tmux 3.5+, version-gated) forces mouse handling
+  back on; hover-highlight and click-to-select work again.
 
 ## [0.2.0] - 2026-07-16
 

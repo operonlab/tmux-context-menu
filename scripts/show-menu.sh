@@ -217,11 +217,19 @@ case "$mode" in
 		done
 		;;
 	mouse)
+		# A menu opened via run-shell has no originating mouse event, so tmux
+		# flags it MENU_NOMOUSE — and under NOMOUSE any non-left-button mouse
+		# event closes the menu, INCLUDING bare motion (which the mouse protocol
+		# encodes with the release bits): hovering instantly dismissed it.
+		# `display-menu -M` (tmux 3.5+) exists exactly for this — force mouse
+		# handling on. Older tmux degrades to keyboard-only, same as before.
+		mflag=()
+		if version_ge "$ver" 3.5; then mflag=(-M); fi
 		case "$mouse_x$mouse_y" in
 			*[!0-9]* | '')
 				# Coordinates missing/garbled (legacy binding) — degrade to M/M,
 				# which needs a live mouse event and may land top-left.
-				tmux display-menu "${target[@]}" -T "$MENU_TITLE" -x M -y M "${menu[@]}"
+				tmux display-menu "${mflag[@]}" "${target[@]}" -T "$MENU_TITLE" -x M -y M "${menu[@]}"
 				;;
 			*)
 				# #{mouse_x}/#{mouse_y} are PANE-RELATIVE (format_cb_mouse_x →
@@ -240,7 +248,7 @@ case "$mode" in
 						[2-5]) status_rows="$(tmux show -gv status)" ;;
 					esac
 				fi
-				tmux display-menu "${target[@]}" -T "$MENU_TITLE" \
+				tmux display-menu "${mflag[@]}" "${target[@]}" -T "$MENU_TITLE" \
 					-x "$(( mouse_x + pane_left ))" \
 					-y "$(( mouse_y + pane_top + status_rows ))" "${menu[@]}"
 				;;
