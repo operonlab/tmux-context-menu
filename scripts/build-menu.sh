@@ -47,7 +47,14 @@ SHOW_MENU="$CURRENT_DIR/show-menu.sh"
 
 # Mouse right-click, popped up at the pointer (show-menu.sh uses -x M -y M).
 if [ "$opt_mouse" = "on" ]; then
-	tmux bind-key -T root MouseDown3Pane run-shell -b "'$SHOW_MENU' mouse"
+	# The mouse coordinates and the clicked pane are expanded HERE, while the
+	# mouse event still exists — after the run-shell hop, display-menu is a brand
+	# new command with no mouse context, so `-x M -y M` inside show-menu.sh
+	# resolves to nothing and the menu lands at 0,0 (top-left). #{mouse_x}/
+	# #{mouse_y} carry the same client coordinates M would have used, and
+	# #{pane_id} is the pane under the pointer (a mouse binding's default
+	# target), so menu commands act on the clicked pane, not the focused one.
+	tmux bind-key -T root MouseDown3Pane run-shell -b "'$SHOW_MENU' mouse '#{mouse_x}' '#{mouse_y}' '#{pane_id}'"
 fi
 
 # Keyboard entry, popped up near the window/status position (-x W -y S).

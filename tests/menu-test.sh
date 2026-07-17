@@ -214,6 +214,38 @@ sleep 0.2
 assert_false "MouseDown3Pane removed after teardown" \
 	bash -c 'tmux -L "$0" list-keys -T root | grep -qE "^bind-key +-T root +MouseDown3Pane "' "$SOCK"
 
+echo "== mouse position: binding forwards event coords; display-menu uses them =="
+# The mouse binding must expand #{mouse_x}/#{mouse_y}/#{pane_id} at event time —
+# after the run-shell hop display-menu has no mouse context, so `-x M -y M`
+# lands the menu at 0,0 (the 2026-07-17 top-left regression).
+tmux -L "$SOCK" run-shell "$REPO/context-menu.tmux"
+sleep 0.2
+assert_true  "mouse binding forwards mouse_x/mouse_y/pane_id" \
+	bash -c 'tmux -L "$0" list-keys -T root | grep -F MouseDown3Pane | grep -q "mouse_x" && tmux -L "$0" list-keys -T root | grep -F MouseDown3Pane | grep -q "pane_id"' "$SOCK"
+
+# Capture the display-menu argv through a PATH shim: display-menu calls are
+# logged, everything else is delegated to the real test server so the builder's
+# option/state queries still work. TMUX stays unset (never the live server).
+SHIMD="$FIXTURE_DIR/shim"; CAP="$FIXTURE_DIR/display-args"; mkdir -p "$SHIMD"
+REAL_TMUX="$(command -v tmux)"
+cat > "$SHIMD/tmux" <<SHIM
+#!/usr/bin/env bash
+if [ "\$1" = "display-menu" ]; then printf '%s\n' "\$@" > "$CAP"; exit 0; fi
+exec "$REAL_TMUX" -L "$SOCK" "\$@"
+SHIM
+chmod +x "$SHIMD/tmux"
+
+PATH="$SHIMD:$PATH" bash "$SHOW" mouse 12 34 %0 >/dev/null 2>&1
+assert_true  "explicit coords reach display-menu (-x 12 -y 34)" \
+	bash -c 'grep -qx -- "-x" "$0" && grep -qx "12" "$0" && grep -qx "34" "$0"' "$CAP"
+assert_true  "clicked pane reaches display-menu (-t %0)" \
+	bash -c 'grep -qx -- "-t" "$0" && grep -qx "%0" "$0"' "$CAP"
+
+rm -f "$CAP"
+PATH="$SHIMD:$PATH" bash "$SHOW" mouse >/dev/null 2>&1
+assert_true  "missing coords degrade to -x M -y M (legacy fallback)" \
+	bash -c 'grep -qx "M" "$0"' "$CAP"
+
 echo
 if [ "$fail" -eq 0 ]; then
 	echo "ALL TESTS PASSED"

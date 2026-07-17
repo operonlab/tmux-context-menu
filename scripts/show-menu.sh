@@ -13,7 +13,11 @@
 #     was opened over (Unzoom vs Zoom, Swap-with-marked, Respawn a dead pane).
 #
 # Modes (first argument):
-#   mouse    show the menu at the mouse pointer   (-x M -y M)
+#   mouse [x y pane]  show the menu at the mouse pointer. x/y/pane are the
+#            #{mouse_x} #{mouse_y} #{pane_id} the BINDING expanded while the
+#            mouse event still existed — display-menu runs after a run-shell
+#            hop with no mouse context, so a bare `-x M -y M` here resolves to
+#            0,0 (top-left). Falls back to M/M when the args are missing.
 #   key      show the menu near the status line   (-x W -y S)   [default]
 #   --print  print the assembled menu, one field per line, and exit — used by
 #            the test suite to inspect the built menu without an attached client.
@@ -26,6 +30,18 @@ CURRENT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$CURRENT_DIR/helpers.sh"
 
 mode="${1:-key}"
+
+# Mouse-event context forwarded by the binding (empty when absent/legacy).
+mouse_x="${2:-}"
+mouse_y="${3:-}"
+mouse_pane="${4:-}"
+# Target args for display-menu AND the live-state query: the clicked pane, so
+# state flags and menu commands apply to the pane under the pointer, not the
+# focused one. Only trusted when it looks like a real pane id.
+target=()
+case "$mouse_pane" in
+	%[0-9]*) target=(-t "$mouse_pane") ;;
+esac
 
 MENU_TITLE='#[align=centre]#{window_index}:#{window_name}'
 
@@ -96,7 +112,7 @@ else
 	# A single display-message round-trip, evaluated against the active pane (the
 	# one the menu was opened over), parsed into shell flags. Only needed by the
 	# built-in list, so it lives here rather than at the top of the script.
-	state="$(tmux display-message -p '#{window_zoomed_flag} #{pane_dead} #{pane_marked_set}' 2>/dev/null)"
+	state="$(tmux display-message "${target[@]}" -p '#{window_zoomed_flag} #{pane_dead} #{pane_marked_set}' 2>/dev/null)"
 	st_zoomed="${state%% *}"
 	state_rest="${state#* }"
 	st_dead="${state_rest%% *}"
@@ -201,7 +217,16 @@ case "$mode" in
 		done
 		;;
 	mouse)
-		tmux display-menu -T "$MENU_TITLE" -x M -y M "${menu[@]}"
+		case "$mouse_x$mouse_y" in
+			*[!0-9]* | '')
+				# Coordinates missing/garbled (legacy binding) — degrade to M/M,
+				# which needs a live mouse event and may land top-left.
+				tmux display-menu "${target[@]}" -T "$MENU_TITLE" -x M -y M "${menu[@]}"
+				;;
+			*)
+				tmux display-menu "${target[@]}" -T "$MENU_TITLE" -x "$mouse_x" -y "$mouse_y" "${menu[@]}"
+				;;
+		esac
 		;;
 	*)
 		tmux display-menu -T "$MENU_TITLE" -x W -y S "${menu[@]}"
